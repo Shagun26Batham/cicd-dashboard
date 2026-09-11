@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  projects     Project[]
+}
+
+model Project {
+  id              String         @id @default(cuid())
+  name            String
+  owner           String
+  repo            String
+  githubTokenEnc  String
+  webhookSecret   String?
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  runs            PipelineRun[]
+  deployments     Deployment[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@unique([owner, repo])
+  @@index([userId])
+}
+
+model PipelineRun {
+  id            String         @id @default(cuid())
+  githubRunId   BigInt         @unique
+  projectId     String
+  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workflowName  String?
+  status        String
+  conclusion    String?
+  branch        String?
+  commitSha     String?
+  commitMessage String?
+  htmlUrl       String?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  durationMs    Int?
+  jobs          PipelineJob[]
+  deployments   Deployment[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([projectId, startedAt])
+}
+
+model PipelineJob {
+  id           String         @id @default(cuid())
+  githubJobId  BigInt         @unique
+  runId        String
+  run          PipelineRun    @relation(fields: [runId], references: [id], onDelete: Cascade)
+  name         String
+  status       String
+  conclusion   String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  steps        PipelineStep[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([runId])
+}
+
+model PipelineStep {
+  id          String       @id @default(cuid())
+  jobId       String
+  job         PipelineJob  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  number      Int
+  name        String
+  status      String
+  conclusion  String?
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  @@unique([jobId, number])
+}
+
+model Deployment {
+  id          String        @id @default(cuid())
+  projectId   String
+  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  runId       String?
+  run         PipelineRun?  @relation(fields: [runId], references: [id], onDelete: SetNull)
+  environment String
+  status      String
+  commitSha   String?
+  timestamp   DateTime      @default(now())
+
+  @@index([projectId, timestamp])
+}

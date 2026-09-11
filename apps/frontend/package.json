@@ -1,0 +1,6 @@
+{
+  "name": "@cicd/frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Next.js dashboard UI — scaffolded in Phase 2"
+}
