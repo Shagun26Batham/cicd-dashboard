@@ -3,11 +3,13 @@
   "private": true,
   "packageManager": "pnpm@10.15.1",
   "scripts": {
-    "dev": "pnpm --filter @cicd/backend dev",
+    "dev": "pnpm --parallel --filter @cicd/backend --filter @cicd/frontend dev",
     "dev:backend": "pnpm --filter @cicd/backend dev",
+    "dev:frontend": "pnpm --filter @cicd/frontend dev",
     "db:generate": "pnpm --filter @cicd/backend db:generate",
     "db:migrate": "pnpm --filter @cicd/backend db:migrate",
-    "db:push": "pnpm --filter @cicd/backend db:push"
+    "db:push": "pnpm --filter @cicd/backend db:push",
+    "db:seed": "pnpm --filter @cicd/backend db:seed"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
