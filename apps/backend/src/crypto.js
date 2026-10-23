@@ -34,3 +34,27 @@ export function decryptSecret(payload) {
     decipher.final(),
   ]).toString("utf8");
 }
+
+export function generateWebhookSecret() {
+  return crypto.randomBytes(24).toString("hex");
+}
+
+export function verifyGitHubSignature(rawBody, secret, signatureHeader) {
+  if (!signatureHeader || !secret) return false;
+  const parts = signatureHeader.split("=");
+  if (parts.length !== 2 || parts[0] !== "sha256") return false;
+  const expectedHash = parts[1];
+
+  const hmac = crypto.createHmac("sha256", secret);
+  hmac.update(rawBody);
+  const calculatedHash = hmac.digest("hex");
+
+  try {
+    const expectedBuf = Buffer.from(expectedHash, "hex");
+    const calculatedBuf = Buffer.from(calculatedHash, "hex");
+    if (expectedBuf.length !== calculatedBuf.length) return false;
+    return crypto.timingSafeEqual(expectedBuf, calculatedBuf);
+  } catch {
+    return false;
+  }
+}

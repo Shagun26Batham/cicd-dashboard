@@ -23,9 +23,7 @@ function emptyBuckets(days) {
       date,
       success: 0,
       failure: 0,
-      other: 0,
-      durationSum: 0,
-      durationCount: 0,
+      avgDurationMs: 0,
       deployments: 0,
     });
   }
@@ -39,76 +37,98 @@ metricsRouter.get("/:projectId", async (req, res, next) => {
 
     const days = 14;
     const since = daysAgo(days - 1);
-    const [runs, deployments, allRuns, allDeployments] = await Promise.all([
-      prisma.pipelineRun.findMany({
-        where: { projectId: project.id, startedAt: { gte: since } },
-        select: { startedAt: true, conclusion: true, durationMs: true },
-      }),
-      prisma.deployment.findMany({
-        where: { projectId: project.id, timestamp: { gte: since } },
-        select: { timestamp: true, status: true },
-      }),
-      prisma.pipelineRun.findMany({
+    const [
+      runBuckets,
+      deploymentBuckets,
+      totalRuns,
+      successfulRuns,
+      failedRuns,
+      durationAgg,
+      totalDeployments,
+      successfulDeployments,
+    ] = await Promise.all([
+      prisma.$queryRaw`
+        SELECT
+          TO_CHAR(DATE_TRUNC('day', "startedAt"), 'YYYY-MM-DD') AS date,
+          COUNT(*) FILTER (WHERE "conclusion" = 'success')::int AS success,
+          COUNT(*) FILTER (WHERE "conclusion" = 'failure')::int AS failure,
+          COALESCE(
+            ROUND(AVG("durationMs") FILTER (WHERE "durationMs" IS NOT NULL AND "durationMs" >= 0)),
+            0
+          )::int AS "avgDurationMs"
+        FROM "PipelineRun"
+        WHERE "projectId" = ${project.id} AND "startedAt" >= ${since}
+        GROUP BY 1
+      `,
+      prisma.$queryRaw`
+        SELECT
+          TO_CHAR(DATE_TRUNC('day', "timestamp"), 'YYYY-MM-DD') AS date,
+          COUNT(*)::int AS deployments
+        FROM "Deployment"
+        WHERE "projectId" = ${project.id} AND "timestamp" >= ${since}
+        GROUP BY 1
+      `,
+      prisma.pipelineRun.count({
         where: { projectId: project.id },
-        select: { conclusion: true, durationMs: true },
       }),
-      prisma.deployment.findMany({
+      prisma.pipelineRun.count({
+        where: { projectId: project.id, conclusion: "success" },
+      }),
+      prisma.pipelineRun.count({
+        where: { projectId: project.id, conclusion: "failure" },
+      }),
+      prisma.pipelineRun.aggregate({
+        where: { projectId: project.id, durationMs: { not: null, gte: 0 } },
+        _avg: { durationMs: true },
+      }),
+      prisma.deployment.count({
         where: { projectId: project.id },
-        select: { status: true },
+      }),
+      prisma.deployment.count({
+        where: {
+          projectId: project.id,
+          status: { in: ["success", "completed", "SUCCESS", "COMPLETED"] },
+        },
       }),
     ]);
 
-    const map = new Map(emptyBuckets(days).map((b) => [b.date, b]));
-
-    for (const run of runs) {
-      if (!run.startedAt) continue;
-      const key = isoDate(run.startedAt);
-      const bucket = map.get(key);
-      if (!bucket) continue;
-      if (run.conclusion === "success") bucket.success += 1;
-      else if (run.conclusion === "failure") bucket.failure += 1;
-      else bucket.other += 1;
-      if (typeof run.durationMs === "number") {
-        bucket.durationSum += run.durationMs;
-        bucket.durationCount += 1;
-      }
+    const map = new Map(emptyBuckets(days).map((bucket) => [bucket.date, bucket]));
+    for (const bucket of runBuckets) {
+      const day = map.get(bucket.date);
+      if (!day) continue;
+      day.success = bucket.success;
+      day.failure = bucket.failure;
+      day.avgDurationMs = bucket.avgDurationMs;
+    }
+    for (const bucket of deploymentBuckets) {
+      const day = map.get(bucket.date);
+      if (day) day.deployments = bucket.deployments;
     }
 
-    for (const dep of deployments) {
-      const key = isoDate(dep.timestamp);
-      const bucket = map.get(key);
-      if (bucket) bucket.deployments += 1;
-    }
-
-    const series = [...map.values()].map((b) => ({
-      date: b.date,
-      success: b.success,
-      failure: b.failure,
-      avgDurationMs: b.durationCount ? Math.round(b.durationSum / b.durationCount) : 0,
-      deployments: b.deployments,
+    const series = [...map.values()].map((bucket) => ({
+      date: bucket.date,
+      success: bucket.success,
+      failure: bucket.failure,
+      avgDurationMs: bucket.avgDurationMs,
+      deployments: bucket.deployments,
     }));
 
-    const successful = allRuns.filter((r) => r.conclusion === "success").length;
-    const failed = allRuns.filter((r) => r.conclusion === "failure").length;
-    const decided = successful + failed;
-    const durations = allRuns
-      .map((r) => r.durationMs)
-      .filter((n) => typeof n === "number" && n >= 0);
-    const deployOk = allDeployments.filter((d) =>
-      ["success", "completed"].includes(String(d.status).toLowerCase()),
-    ).length;
+    const decided = successfulRuns + failedRuns;
+    const successRate = decided === 0 ? 0 : successfulRuns / decided;
+    const avgBuildDurationMs = durationAgg._avg.durationMs
+      ? Math.round(durationAgg._avg.durationMs)
+      : 0;
+    const deploymentSuccessRate =
+      totalDeployments === 0 ? 0 : successfulDeployments / totalDeployments;
 
     res.json({
       projectId: project.id,
-      successRate: decided === 0 ? 0 : successful / decided,
-      avgBuildDurationMs: durations.length
-        ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
-        : 0,
-      deploymentSuccessRate:
-        allDeployments.length === 0 ? 0 : deployOk / allDeployments.length,
-      totalRuns: allRuns.length,
-      failedRuns: failed,
-      totalDeployments: allDeployments.length,
+      successRate,
+      avgBuildDurationMs,
+      deploymentSuccessRate,
+      totalRuns,
+      failedRuns,
+      totalDeployments,
       series,
     });
   } catch (err) {

@@ -4,7 +4,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD to a URL-safe secret}"
       POSTGRES_DB: cicd_dashboard
     ports:
       - "5432:5432"
@@ -25,13 +25,38 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/cicd_dashboard?schema=public
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      DATABASE_URL: "postgresql://postgres:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD to a URL-safe secret}@postgres:5432/cicd_dashboard?schema=public"
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY:?Set ENCRYPTION_KEY to a random 64-character hex key}"
+      JWT_SECRET: "${JWT_SECRET:?Set JWT_SECRET to a random secret of at least 32 characters}"
+      WEBHOOK_SECRET: "${WEBHOOK_SECRET:?Set WEBHOOK_SECRET to a random secret of at least 32 characters}"
       PORT: 4000
+      FRONTEND_ORIGIN: "${FRONTEND_ORIGIN:?Set FRONTEND_ORIGIN to the dashboard origin}"
+      NODE_ENV: "${NODE_ENV:?Set NODE_ENV explicitly}"
+      TRUST_PROXY: "${TRUST_PROXY:-0}"
     ports:
       - "4000:4000"
-    profiles:
-      - full
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL to the browser-reachable API URL}"
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL to the browser-reachable API URL}"
+      PORT: 3000
+    ports:
+      - "3000:3000"
 
 volumes:
   postgres_data:

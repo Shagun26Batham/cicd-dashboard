@@ -33,8 +33,10 @@ export type Project = {
   name: string;
   owner: string;
   repo: string;
+  hasWebhookSecret?: boolean;
   createdAt: string;
 };
+
 export type PipelineRun = {
   id: string;
   githubRunId: string;
@@ -102,4 +104,52 @@ export type MetricsPayload = {
     avgDurationMs: number;
     deployments: number;
   }>;
+};
+
+export type PipelineEvent = {
+  id: string;
+  type: "workflow_run" | "workflow_job" | "deployment";
+  action?: string;
+  projectId?: string;
+  projectName?: string;
+  runId?: string;
+  githubRunId?: string;
+  workflowName?: string;
+  jobName?: string;
+  status?: string;
+  conclusion?: string | null;
+  branch?: string | null;
+  commitSha?: string | null;
+  commitMessage?: string | null;
+  title: string;
+  timestamp: string;
+};
+
+export type Workflow = {
+  id: number | string;
+  name: string;
+  path: string;
+  state: string;
+  created_at?: string;
+  updated_at?: string;
+  url?: string;
+  html_url?: string;
+  badge_url?: string;
+};
+
+export type WorkflowYamlDetail = {
+  workflow: {
+    id: number | string;
+    name: string;
+    path: string;
+    state: string;
+    htmlUrl?: string;
+    badgeUrl?: string;
+    createdAt?: string;
+    updatedAt?: string;
+  };
+  content: string;
+  sha?: string;
+  size?: number;
+  ref?: string | null;
 };

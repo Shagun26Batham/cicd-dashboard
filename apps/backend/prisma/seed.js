@@ -166,8 +166,22 @@ async function main() {
     ],
   });
 
-  console.log(`Seeded demo user ${email} / ${password} with 2 projects`);
+  await seedProject(user.id, {
+    owner: "acme",
+    repo: "data-pipeline",
+    name: "Data Pipeline",
+    runIdBase: 920001,
+    runs: [
+      { hoursAgo: 180, durationMs: 340000, conclusion: "success", branch: "main", sha: "999fff111a", message: "feat: etl job scheduler", workflow: "ETL", deploy: true, environment: "production" },
+      { hoursAgo: 70, durationMs: 290000, conclusion: "success", branch: "main", sha: "888eee222b", message: "perf: optimize parquet sinks", workflow: "ETL", deploy: true, environment: "staging" },
+      { hoursAgo: 14, durationMs: 420000, conclusion: "failure", branch: "feat/streaming", sha: "777ddd333c", message: "feat: kafka stream joiner", workflow: "ETL", failStep: "test" },
+      { hoursAgo: 1, durationMs: 195000, conclusion: "success", branch: "feat/streaming", sha: "666ccc444d", message: "fix: handle schema evolution", workflow: "ETL", deploy: true, environment: "staging" },
+    ],
+  });
+
+  console.log(`Seeded demo user ${email} / ${password} with 3 projects and rich telemetry`);
 }
+
 
 main()
   .catch((err) => {

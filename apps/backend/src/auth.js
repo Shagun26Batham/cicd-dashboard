@@ -18,9 +18,10 @@ export function signUserToken(user) {
 }
 
 export function setAuthCookie(res, token) {
+  const sameSite = (process.env.COOKIE_SAME_SITE || "lax").toLowerCase();
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite,
     secure: process.env.NODE_ENV === "production",
     maxAge: 7 * 24 * 60 * 60 * 1000,
     path: "/",
@@ -28,11 +29,19 @@ export function setAuthCookie(res, token) {
 }
 
 export function clearAuthCookie(res) {
-  res.clearCookie(COOKIE_NAME, { path: "/" });
+  const sameSite = (process.env.COOKIE_SAME_SITE || "lax").toLowerCase();
+  res.clearCookie(COOKIE_NAME, {
+    httpOnly: true,
+    sameSite,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  });
 }
 
 export function requireAuth(req, res, next) {
-  const token = req.cookies?.[COOKIE_NAME];
+  const authHeader = req.headers?.authorization;
+  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  const token = req.cookies?.[COOKIE_NAME] || bearerToken;
   if (!token) {
     return res.status(401).json({ error: "unauthorized" });
   }

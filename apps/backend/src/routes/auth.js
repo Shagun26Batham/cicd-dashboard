@@ -2,18 +2,37 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import { clearAuthCookie, requireAuth, setAuthCookie, signUserToken } from "../auth.js";
 import { prisma } from "../prisma.js";
+import { createRateLimiter } from "../rateLimit.js";
 
 export const authRouter = Router();
+
+const loginLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: "Too many login attempts, please try again in 15 minutes",
+});
+
+const registerLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10,
+  message: "Too many registration attempts, please try again in 1 hour",
+});
+
+// Minimal email sanity check: requires local@domain.tld format
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function publicUser(user) {
   return { id: user.id, email: user.email, role: "user", createdAt: user.createdAt };
 }
 
-authRouter.post("/register", async (req, res, next) => {
+authRouter.post("/register", registerLimiter, async (req, res, next) => {
   try {
     const { email, password } = req.body ?? {};
     if (!email || !password) {
       return res.status(400).json({ error: "email and password are required" });
+    }
+    if (!EMAIL_RE.test(String(email))) {
+      return res.status(400).json({ error: "invalid email address" });
     }
     if (String(password).length < 6) {
       return res.status(400).json({ error: "password must be at least 6 characters" });
@@ -31,14 +50,15 @@ authRouter.post("/register", async (req, res, next) => {
       },
     });
 
-    setAuthCookie(res, signUserToken(user));
-    res.status(201).json(publicUser(user));
+    const token = signUserToken(user);
+    setAuthCookie(res, token);
+    res.status(201).json({ token, ...publicUser(user) });
   } catch (err) {
     next(err);
   }
 });
 
-authRouter.post("/login", async (req, res, next) => {
+authRouter.post("/login", loginLimiter, async (req, res, next) => {
   try {
     const { email, password } = req.body ?? {};
     if (!email || !password) {
@@ -50,8 +70,9 @@ authRouter.post("/login", async (req, res, next) => {
       return res.status(401).json({ error: "invalid email or password" });
     }
 
-    setAuthCookie(res, signUserToken(user));
-    res.json(publicUser(user));
+    const token = signUserToken(user);
+    setAuthCookie(res, token);
+    res.json({ token, ...publicUser(user) });
   } catch (err) {
     next(err);
   }

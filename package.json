@@ -8,9 +8,13 @@
     "dev:frontend": "pnpm --filter @cicd/frontend dev",
     "db:generate": "pnpm --filter @cicd/backend db:generate",
     "db:migrate": "pnpm --filter @cicd/backend db:migrate",
+    "db:deploy": "pnpm --filter @cicd/backend db:deploy",
     "db:push": "pnpm --filter @cicd/backend db:push",
-    "db:seed": "pnpm --filter @cicd/backend db:seed"
+    "db:seed": "pnpm --filter @cicd/backend db:seed",
+    "test": "pnpm --filter @cicd/backend test",
+    "build": "pnpm --filter @cicd/frontend build"
   },
+
   "pnpm": {
     "onlyBuiltDependencies": [
       "@prisma/client",
